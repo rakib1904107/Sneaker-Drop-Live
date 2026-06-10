@@ -1,0 +1,82 @@
+// Prisma schema for the Sneaker Drop inventory system.
+// Run `npx prisma migrate dev` to create these tables in Postgres.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// A merch drop, e.g. "Air Jordan 1 - 100 units".
+/// `availableStock` is the live count we decrement atomically on reserve.
+model Drop {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  imageUrl       String?
+  totalStock     Int // immutable original quantity
+  availableStock Int // live, decremented on reserve, restored on expiry
+  startsAt       DateTime @default(now()) // when the drop goes live
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  reservations Reservation[]
+  purchases    Purchase[]
+
+  @@index([startsAt])
+}
+
+/// A registered user. Kept minimal — no auth for this assessment.
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  createdAt DateTime @default(now())
+
+  reservations Reservation[]
+  purchases    Purchase[]
+}
+
+enum ReservationStatus {
+  ACTIVE // currently holding a unit, within the 60s window
+  EXPIRED // window elapsed, unit returned to stock
+  COMPLETED // converted into a purchase
+}
+
+/// A temporary hold on one unit of a drop.
+/// `expiresAt` is the durable deadline the sweeper reads from.
+model Reservation {
+  id        String            @id @default(cuid())
+  dropId    String
+  userId    String
+  status    ReservationStatus @default(ACTIVE)
+  expiresAt DateTime // when this hold lapses (createdAt + TTL)
+  createdAt DateTime          @default(now())
+
+  drop     Drop      @relation(fields: [dropId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purchase Purchase?
+
+  // The sweeper queries on (status, expiresAt) — index it for speed.
+  @@index([status, expiresAt])
+  @@index([dropId])
+  @@index([userId])
+}
+
+/// A permanent, completed purchase. Drives the "Activity Feed" (latest 3 buyers).
+model Purchase {
+  id            String   @id @default(cuid())
+  dropId        String
+  userId        String
+  reservationId String   @unique // one purchase per reservation
+  createdAt     DateTime @default(now())
+
+  drop        Drop        @relation(fields: [dropId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  // Activity feed queries latest purchases per drop — index it.
+  @@index([dropId, createdAt])
+}
