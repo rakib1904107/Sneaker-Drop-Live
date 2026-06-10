@@ -12,11 +12,6 @@ within that window. The system guarantees **no overselling** under concurrency a
 | **API (backend)** | https://sneaker-drop-live.onrender.com |
 | **Video walkthrough** | _add your Loom link here_ |
 
-> ℹ️ The backend is on Render's free tier, which **sleeps after ~15 min idle**. The first
-> request after a quiet period takes ~30–50s to cold-start — just load the app once and give
-> it a moment. Subsequent requests are instant.
-
-> **Tip:** open the app in **two browser windows** side-by-side to see real-time stock sync.
 
 ## Stack
 | Layer | Tech |
