@@ -5,6 +5,19 @@ live stock counts over WebSockets, **reserve** an item for 60 seconds, and **pur
 within that window. The system guarantees **no overselling** under concurrency and
 **automatically recovers stock** from expired reservations.
 
+## 🔗 Live demo
+| | URL |
+|--|-----|
+| **App (frontend)** | https://sneaker-drop-live.vercel.app |
+| **API (backend)** | https://sneaker-drop-live.onrender.com |
+| **Video walkthrough** | _add your Loom link here_ |
+
+> ℹ️ The backend is on Render's free tier, which **sleeps after ~15 min idle**. The first
+> request after a quiet period takes ~30–50s to cold-start — just load the app once and give
+> it a moment. Subsequent requests are instant.
+
+> **Tip:** open the app in **two browser windows** side-by-side to see real-time stock sync.
+
 ## Stack
 | Layer | Tech |
 |-------|------|
@@ -190,13 +203,63 @@ Expected output: **1 success (201), 99 rejections (409), final stock = 0.**
 
 ## Deployment (bonus)
 
-- **Database:** Neon (serverless Postgres). Set `DATABASE_URL` from its connection string.
-- **Frontend:** Vercel (static Vite build). Set `VITE_API_URL` to the deployed backend URL.
-- **Backend:** **Render or Railway** rather than Vercel. Socket.io needs a long-lived
-  server connection, which Vercel's serverless functions don't hold well; a persistent
-  Node service on Render/Railway is the reliable choice for WebSockets.
-- **Environment variables:** never commit `.env`. Set `DATABASE_URL`, `PORT`,
-  `CLIENT_ORIGIN` (backend) and `VITE_API_URL` (frontend) in the host's dashboard.
+```
+Browser ──► Vercel (React) ──API + WebSocket──► Render (Express + Socket.io) ──Prisma──► Neon (Postgres)
+```
+
+**Why this split?** Socket.io needs a **long-lived server** that holds WebSocket
+connections open. Vercel's serverless functions don't do that well, so the backend runs on
+**Render** (a persistent Node service) while the static frontend is on **Vercel**.
+
+### 1. Database — Neon
+Create a free project at [neon.tech](https://neon.tech) and copy the connection string.
+
+### 2. Backend — Render
+New **Web Service** from the GitHub repo:
+| Setting | Value |
+|---------|-------|
+| Root Directory | `server` |
+| Build Command | `npm install && npx prisma generate && npx prisma migrate deploy` |
+| Start Command | `npm start` |
+
+Environment variables (Render dashboard — never commit them):
+| Key | Value |
+|-----|-------|
+| `DATABASE_URL` | Neon connection string |
+| `CLIENT_ORIGIN` | your Vercel URL, e.g. `https://sneaker-drop-live.vercel.app` |
+| `RESERVATION_TTL_SECONDS` | `60` |
+| `SWEEPER_INTERVAL_MS` | `3000` |
+
+> Do **not** set `PORT` — Render injects it and the app reads `process.env.PORT`.
+> Production uses `prisma migrate deploy` (applies existing migrations non-interactively),
+> not `migrate dev`. Seed demo drops once via Render's **Shell**: `npm run seed`.
+
+### 3. Frontend — Vercel
+Import the repo as a new project:
+| Setting | Value |
+|---------|-------|
+| Root Directory | `client` |
+| Framework | Vite (auto-detected) |
+
+Environment variable:
+| Key | Value |
+|-----|-------|
+| `VITE_API_URL` | your Render backend URL, e.g. `https://sneaker-drop-live.onrender.com` |
+
+> ⚠️ Vite bakes `VITE_API_URL` in **at build time** — after changing it you must **redeploy**.
+
+### 4. CORS
+The backend auto-allows `localhost` and **any `*.vercel.app` origin** (see `isAllowedOrigin`
+in `src/index.js`), so every Vercel production/preview URL works without reconfiguration.
+`CLIENT_ORIGIN` can additionally list exact origins (comma-separated) for non-Vercel hosts.
+
+### Common gotchas
+| Symptom | Fix |
+|---------|-----|
+| `Failed to fetch` on the live site | Backend not deployed, or `VITE_API_URL` not set / not redeployed after setting it. |
+| Socket error `net::ERR_FAILED 200 (OK)` | CORS — the visited origin isn't allowed. Handled here by the `*.vercel.app` rule. |
+| First request hangs ~30–50s | Render free tier cold-start. Normal; load once to wake it. |
+| Prisma "table does not exist" | Build command must include `npx prisma migrate deploy`. |
 
 ---
 
