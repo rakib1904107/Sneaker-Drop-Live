@@ -83,16 +83,23 @@ function CreateDropForm({ onCreated }) {
   const [name, setName] = useState("");
   const [totalStock, setTotalStock] = useState(10);
   const [description, setDescription] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await api.createDrop({ name, totalStock: Number(totalStock), description });
+      await api.createDrop({
+        name,
+        totalStock: Number(totalStock),
+        description,
+        imageUrl: imageUrl.trim() || undefined,
+      });
       toast.success(`Drop "${name}" created`);
       setName("");
       setDescription("");
+      setImageUrl("");
       setTotalStock(10);
       setOpen(false);
       onCreated();
@@ -140,6 +147,13 @@ function CreateDropForm({ onCreated }) {
           >
             {submitting ? "Creating…" : "Create"}
           </button>
+          <input
+            type="url"
+            placeholder="Image URL (optional)"
+            value={imageUrl}
+            onChange={(e) => setImageUrl(e.target.value)}
+            className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm sm:col-span-4"
+          />
           <input
             placeholder="Description (optional)"
             value={description}
